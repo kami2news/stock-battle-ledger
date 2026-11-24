@@ -21,5 +21,7 @@ for (const file of files) {
 
 mkdirSync("_site", { recursive: true });
 copyFileSync("index.html", "_site/index.html");
+copyFileSync("setup.html", "_site/setup.html");
+if (existsSync("config/writer.json")) copyFileSync("config/writer.json", "_site/writer.json");
 writeFileSync("_site/ledger.json", JSON.stringify({ built: new Date().toISOString(), trades, prices, bad }));
 console.log(`trades=${trades.length} prices=${prices.length} bad=${bad.length}`);

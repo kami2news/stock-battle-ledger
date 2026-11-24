@@ -66,6 +66,9 @@ button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]) button.primary{color:#141414}}
 button:disabled{opacity:.45;cursor:not-allowed}
 a.del{font-size:12px;color:var(--sub)}
+button.del{min-height:28px;padding:0 8px;font-size:12px;font-weight:400}
+button.del.arm{background:var(--stopbg);color:var(--stop);border-color:var(--stop)}
+.res button{margin-top:6px}
 a.go{display:inline-flex;align-items:center;min-height:32px;padding:0 16px;border-radius:4px;background:var(--brand);color:#fff;font-weight:600;text-decoration:none;margin-top:6px}
 :root[data-theme=dark] a.go{color:#141414}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]) a.go{color:#141414}}
@@ -101,6 +104,7 @@ a.go{display:inline-flex;align-items:center;min-height:32px;padding:0 16px;borde
 <section><div class="card" id="entry">
 <h2>記入</h2>
 <div class="sub">記入者 <span class="seg" id="pseg"><button type="button" data-p="claude" aria-pressed="true">Claude</button><button type="button" data-p="muse" aria-pressed="false">Muse</button></span><span class="meta" id="lock"></span></div>
+<div id="pwrow" hidden><label style="max-width:320px">パスワード（Muse の記入用）<input type="password" id="pw" autocomplete="off"></label></div>
 <form id="tf">
 <label>日付（YYYY-MM-DD）<input id="f-d" inputmode="numeric" placeholder="2026-12-01" pattern="\d{4}-\d{2}-\d{2}" required></label>
 <label>売買<select id="f-s"><option value="buy">買</option><option value="sell">売</option></select></label>
@@ -180,6 +184,7 @@ const px=v=>Number(v).toLocaleString("ja-JP",{maximumFractionDigits:2})+" 円";
 const cls=v=>v>0?"pos":v<0?"neg":"";
 const jst=()=>new Date(Date.now()+9*36e5).toISOString();
 const today=()=>jst().slice(0,10);
+const rmBtn=f=>CFG&&/^\d{8}-\d{6}-(muse|price)-/.test(f)?`<button type="button" class="del" data-rm="${esc(f)}">取消</button>`:`<a class="del" href="${esc(delUrl(f))}" target="_blank" rel="noopener">取消</a>`;
 const delUrl=f=>`https://github.com/${REPO}/delete/${BR}/entries/${encodeURIComponent(f)}`;
 let TR=[],PR=[],BAD=0,BUILT=null,R=compute([],[]),P="claude";
 
@@ -197,9 +202,9 @@ function render(){
     ${h.map(x=>`<tr><td>${esc(x.name)}</td><td>${esc(x.code)}</td><td class="n">${x.qty.toLocaleString("ja-JP")}</td><td class="n">${px(x.avg)}</td><td class="n">${px(x.cur)}</td><td>${esc(x.curD||"—")}</td><td class="n">${yen(x.mv)}</td><td class="n ${cls(x.ul)}">${syen(x.ul)}</td><td class="n ${cls(x.ul)}">${pct(x.ulr)}</td></tr>`).join("")}</table></div>`:`<div class="empty">保有なし</div>`}</div>`}).join("");
   $("trades").innerHTML=PS.map(p=>{const t=R.sorted.filter(x=>x.p===p);return`<div class="card"><h2><span class="who"><span class="dot ${p}"></span>${PN[p]} 売買実績</span></h2>${t.length?`<div class="scroll"><table>
     <tr><th>日付</th><th>売買</th><th>銘柄名</th><th>コード</th><th class="n">数量</th><th class="n">約定価格</th><th class="n">約定金額</th><th>判定</th><th></th></tr>
-    ${t.map(x=>{const st=R.status.get(x.id)||"形式不正";return`<tr class="${st==="有効"?"":"bad"}"><td>${esc(x.d)}</td><td>${x.side==="buy"?"買":x.side==="sell"?"売":"?"}</td><td>${esc(x.name)}</td><td>${esc(x.code)}</td><td class="n">${esc(Number(x.qty).toLocaleString("ja-JP"))}</td><td class="n">${esc(px(x.px))}</td><td class="n">${esc(yen(x.qty*x.px||0))}</td><td class="st">${st}</td><td><a class="del" href="${esc(delUrl(x.file))}" target="_blank" rel="noopener">取消</a></td></tr>`}).join("")}</table></div>`:`<div class="empty">記入なし</div>`}</div>`}).join("");
+    ${t.map(x=>{const st=R.status.get(x.id)||"形式不正";return`<tr class="${st==="有効"?"":"bad"}"><td>${esc(x.d)}</td><td>${x.side==="buy"?"買":x.side==="sell"?"売":"?"}</td><td>${esc(x.name)}</td><td>${esc(x.code)}</td><td class="n">${esc(Number(x.qty).toLocaleString("ja-JP"))}</td><td class="n">${esc(px(x.px))}</td><td class="n">${esc(yen(x.qty*x.px||0))}</td><td class="st">${st}</td><td>${rmBtn(x.file)}</td></tr>`}).join("")}</table></div>`:`<div class="empty">記入なし</div>`}</div>`}).join("");
   const ps=PR.slice().sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:String(a.code).localeCompare(b.code));
-  $("prices").innerHTML=ps.length?`<tr><th>日付</th><th>コード</th><th>銘柄名</th><th class="n">現在値</th><th></th></tr>`+ps.map(x=>`<tr><td>${esc(x.d)}</td><td>${esc(x.code)}</td><td>${esc(x.name)}</td><td class="n">${esc(px(x.px))}</td><td><a class="del" href="${esc(delUrl(x.file))}" target="_blank" rel="noopener">取消</a></td></tr>`).join(""):`<tr><td class="empty">記入なし</td></tr>`;
+  $("prices").innerHTML=ps.length?`<tr><th>日付</th><th>コード</th><th>銘柄名</th><th class="n">現在値</th><th></th></tr>`+ps.map(x=>`<tr><td>${esc(x.d)}</td><td>${esc(x.code)}</td><td>${esc(x.name)}</td><td class="n">${esc(px(x.px))}</td><td>${rmBtn(x.file)}</td></tr>`).join(""):`<tr><td class="empty">記入なし</td></tr>`;
   const H={claude:R.acct.claude.hist,muse:R.acct.muse.hist};
   $("hist").innerHTML=`<tr><th>日付</th><th class="n">Claude 合計資産</th><th class="n">Muse 合計資産</th></tr>`+H.claude.map((h,i)=>`<tr><td>${esc(h.d)}</td><td class="n">${yen(h.total)}</td><td class="n">${yen(H.muse[i].total)}</td></tr>`).join("");
   $("f-go").disabled=R.acct[P].stopped;
@@ -225,8 +230,25 @@ const ro=new ResizeObserver(draw);ro.observe($("fig"));
 const num=s=>Number(String(s).replace(/[,，円\s]/g,""));
 const fname=kind=>{const s=jst().replace(/[-:T]/g,"").slice(0,14);return`${s.slice(0,8)}-${s.slice(8,14)}-${kind}-${Math.random().toString(36).slice(2,6)}.txt`};
 const newUrl=(file,line)=>`https://github.com/${REPO}/new/${BR}?filename=${encodeURIComponent("entries/"+file)}&value=${encodeURIComponent(line+"\n")}`;
+let CFG=null,TOK=null;
+const API=`https://api.github.com/repos/${REPO}/contents/entries/`;
+const b64d=t=>Uint8Array.from(atob(t),c=>c.charCodeAt(0));
+const b64u=s=>{const b=new TextEncoder().encode(s);let o="";for(const x of b)o+=String.fromCharCode(x);return btoa(o)};
+async function token(){
+  if(TOK)return TOK;const pw=$("pw").value;if(!pw)throw"パスワード未入力";
+  const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveKey"]);
+  const key=await crypto.subtle.deriveKey({name:"PBKDF2",salt:b64d(CFG.salt),iterations:CFG.iter,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["decrypt"]);
+  try{TOK=new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(CFG.iv)},key,b64d(CFG.ct)))}catch(_){throw"パスワードが違います"}
+  return TOK;
+}
+async function gh(path,opt={}){const t=await token();const r=await fetch(API+path,{...opt,headers:{Authorization:"Bearer "+t,Accept:"application/vnd.github+json"}});if(!r.ok)throw"GitHub "+r.status;return r.status===204?null:r.json()}
+async function putEntry(file,line){try{await gh(encodeURIComponent(file),{method:"PUT",body:JSON.stringify({message:"記入（"+file.split("-")[2]+"）",content:b64u(line+"\n"),branch:BR})});return"ok"}catch(e){return String(e)}}
+async function rmEntry(file){try{const f=await gh(encodeURIComponent(file)+"?ref="+BR);await gh(encodeURIComponent(file),{method:"DELETE",body:JSON.stringify({message:"取消（"+file.split("-")[2]+"）",sha:f.sha,branch:BR})});return"ok"}catch(e){return String(e)}}
 function show(el,ok,line,file){
-  el.innerHTML=ok?`<span class="okc">判定：有効</span>\n<code>${esc(line)}</code>\n<a class="go" id="${el.id}-link" href="${esc(newUrl(file,line))}" target="_blank" rel="noopener">GitHubで記入する</a>`:`<span class="ng">判定：${esc(line)}（記入できません）</span>`;
+  const direct=CFG&&(P==="muse"||el.id==="p-res");
+  el.innerHTML=ok?`<span class="okc">判定：有効</span>\n<code>${esc(line)}</code>\n`+(direct?`<button type="button" class="primary" id="${el.id}-write">記入する</button> `:"")+`<a class="${direct?"del":"go"}" id="${el.id}-link" href="${esc(newUrl(file,line))}" target="_blank" rel="noopener">GitHubで記入する</a>`:`<span class="ng">判定：${esc(line)}（記入できません）</span>`;
+  const w=document.getElementById(el.id+"-write");
+  if(w)w.onclick=async()=>{w.disabled=true;const r=await putEntry(file,line);el.innerHTML=r==="ok"?`<span class="okc">記入しました。1〜2分後に再読み込みすると反映されます。</span>\n<code>${esc(line)}</code>`:`<span class="ng">記入できませんでした：${esc(r)}</span>\n<code>${esc(line)}</code>`};
 }
 const setP=p=>{P=p;document.querySelectorAll("#pseg button").forEach(x=>x.setAttribute("aria-pressed",x.dataset.p===p))};
 document.querySelectorAll("#pseg button").forEach(b=>b.onclick=()=>{setP(b.dataset.p);$("f-res").textContent="";render()});
@@ -245,6 +267,10 @@ const hp=location.hash.slice(1);
 if(PS.includes(hp)){setP(hp);document.querySelectorAll("#pseg button").forEach(x=>x.disabled=x.dataset.p!==hp);$("lock").textContent="記入者固定："+PN[hp]}
 $("f-d").value=$("p-d").value=today();
 render();
+document.addEventListener("click",async e=>{const b=e.target.closest("button[data-rm]");if(!b)return;
+  if(!b.classList.contains("arm")){b.classList.add("arm");b.textContent="取消を確定";setTimeout(()=>{if(!b.disabled){b.classList.remove("arm");b.textContent="取消"}},4000);return}
+  b.disabled=true;b.textContent="取消中";const r=await rmEntry(b.dataset.rm);b.textContent=r==="ok"?"取消済み（反映待ち）":"失敗："+r});
+fetch("writer.json",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.ct){CFG=j;$("pwrow").hidden=false;render()}}).catch(()=>{});
 fetch("ledger.json?t="+Date.now(),{cache:"no-store"}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{TR=j.trades||[];PR=j.prices||[];BAD=(j.bad||[]).length;BUILT=j.built;render()})
  .catch(()=>{const c=$("conn");c.hidden=false;c.textContent="集計データを読み込めません。"});
 }
