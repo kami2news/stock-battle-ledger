@@ -76,6 +76,10 @@ a.go{display:inline-flex;align-items:center;min-height:32px;padding:0 16px;borde
 .res{font-size:13px;margin-top:8px;white-space:pre-wrap}
 .res .ng{color:var(--stop)}.res .okc{color:var(--ok)}
 #conn{font-size:13px;color:var(--stop)}
+.mixhead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}.mixhead h2{margin:0}
+.mixfig{height:380px}
+:root{--total:light-dark(#C2551C,#F59A5E);--cashfill:light-dark(#DADCE0,#3A3D42)}
+.sw{display:inline-block;width:14px;height:10px;border-radius:2px}
 .stopnote{color:var(--stop);font-size:13px;font-weight:600;margin:6px 0 0}
 .stopnote:empty{display:none}
 body.loading #cards,body.loading #holds,body.loading #trades,body.loading #prices,body.loading .fig{opacity:.35}
@@ -99,6 +103,13 @@ details summary{cursor:pointer;font-size:13px;color:var(--sub);margin-top:8px;mi
 <div class="fig" id="fig"><svg id="chart" role="img" aria-label="合計資産の推移"></svg></div>
 <div class="legend"><span><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="var(--claude)" stroke-width="3"/></svg>Claude</span><span><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="var(--muse)" stroke-width="3" stroke-dasharray="6 4"/></svg>Muse</span><span><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="var(--warn)" stroke-width="2" stroke-dasharray="2 3"/></svg>警告 200,000 円</span></div>
 <details class="histbox"><summary>推移の表（新しい順）</summary><div class="scroll hist"><table id="hist"></table></div></details>
+</div></section>
+
+<section><div class="card">
+<div class="mixhead"><h2>資産の内訳</h2><span class="seg" id="mseg"><button type="button" data-m="claude" aria-pressed="true">Claude</button><button type="button" data-m="muse" aria-pressed="false">Muse</button></span></div>
+<div class="fig mixfig" id="mfig"><svg id="mchart" role="img" aria-label="現金と銘柄ごとの時価の推移"></svg></div>
+<div class="legend" id="mlegend"></div>
+<p class="meta">面＝現金と銘柄ごとのその時点の時価　線＝合計資産　▲買　▼売</p>
 </div></section>
 
 <section><div class="col" id="holds"></div></section>
@@ -153,7 +164,7 @@ function compute(trades,prices,today){
   ev.sort((a,b)=>a.x.d<b.x.d?-1:a.x.d>b.x.d?1:((a.x.ts||0)-(b.x.ts||0))||(a.k===b.k?0:a.k==="p"?-1:1));
   const keys=[...new Set(ev.map(e=>evKey(e.x)))];
   const S={};
-  for(const p of PS)S[p]={cash:START,pos:{},realized:0,stopped:false,stopKey:null,rec:{},trd:{},hist:[{d:"開始",total:START}]};
+  for(const p of PS)S[p]={cash:START,pos:{},realized:0,stopped:false,stopKey:null,rec:{},trd:{},names:{},hist:[{d:"開始",total:START,cash:START,parts:{},tr:[]}]};
   const pxOf=(s,c)=>s.rec[c]||s.trd[c]||null;
   const value=s=>{let v=0;for(const[c,h]of Object.entries(s.pos)){const q=pxOf(s,c);v+=h.qty*(q?q.px:h.avg)}return v};
   let i=0;
@@ -173,10 +184,12 @@ function compute(trades,prices,today){
         if(!h||h.qty<t.qty){status.set(t.id,"保有不足");continue}
         s.realized+=(t.px-h.avg)*t.qty;s.cash+=amt;h.qty-=t.qty;if(h.qty===0)delete s.pos[t.code];
       }
-      s.trd[t.code]={px:t.px,d:t.d};
+      s.trd[t.code]={px:t.px,d:t.d};s.names[t.code]=t.name||s.names[t.code]||t.code;(s.gtr=s.gtr||[]).push({side:t.side,code:t.code,name:t.name});
       status.set(t.id,"有効");
     }
-    for(const p of PS){const s=S[p],total=s.cash+value(s);if(!s.stopped&&total<=0){s.stopped=true;s.stopKey=k}s.hist.push({d:k,total})}
+    for(const p of PS){const s=S[p],total=s.cash+value(s);if(!s.stopped&&total<=0){s.stopped=true;s.stopKey=k}
+      const parts={};for(const[c,h]of Object.entries(s.pos)){const q=pxOf(s,c);parts[c]=h.qty*(q?q.px:h.avg)}
+      s.hist.push({d:k,total,cash:s.cash,parts,tr:s.gtr||[]});s.gtr=[]}
   }
   for(const p of PS){
     const s=S[p];
@@ -185,7 +198,7 @@ function compute(trades,prices,today){
     const stock=holds.reduce((a,h)=>a+h.mv,0),cost=holds.reduce((a,h)=>a+h.qty*h.avg,0),total=s.cash+stock;
     const stopped=s.stopped||total<=0;
     const state=stopped?"中止":total<WARN?"警告":"正常";
-    out[p]={cash:s.cash,stock,total,realized:s.realized,ul:stock-cost,ulr:cost?(stock-cost)/cost:0,holds,hist:s.hist,state,stopped,stopKey:s.stopKey||(stopped?keys[keys.length-1]||null:null),lastPx:s.rec,lastTrd:s.trd};
+    out[p]={cash:s.cash,stock,total,realized:s.realized,ul:stock-cost,ulr:cost?(stock-cost)/cost:0,holds,hist:s.hist,state,stopped,stopKey:s.stopKey||(stopped?keys[keys.length-1]||null:null),lastPx:s.rec,lastTrd:s.trd,names:s.names};
   }
   const lastDate=keys.length?keys[keys.length-1].slice(0,10):null;
   return{acct:out,status,pstatus,dates:keys,lastDate,sorted:trades.slice().sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:(a.ts||0)-(b.ts||0))};
@@ -236,7 +249,7 @@ function render(){
   $("hist").innerHTML=`<tr><th>日付・時刻</th><th class="n">Claude 合計資産</th><th class="n">Muse 合計資産</th></tr>`+H.claude.map((h,i)=>({h,m:H.muse[i]})).reverse().map(({h,m})=>`<tr><td>${esc(h.d)}</td><td class="n">${yen(h.total)}</td><td class="n">${yen(m.total)}</td></tr>`).join("");
   const a=R.acct[P];$("f-go").disabled=LOADING||a.stopped;$("p-go").disabled=LOADING;
   $("stopmsg").textContent=a.stopped&&!LOADING?`${PN[P]} は${stopNote(a)}。`:"";
-  draw();
+  draw();drawMix();
 }
 const svg=$("chart");
 function draw(){
@@ -254,6 +267,56 @@ function draw(){
    +lab.map(i=>`<text x="${x(i)}" y="${H-8}" text-anchor="${n<2?"middle":i===0?"start":"end"}" font-size="11" fill="var(--sub)">${esc(A[i].d)}</text>`).join("");
 }
 const ro=new ResizeObserver(draw);ro.observe($("fig"));
+// 資産の内訳（積み上げ面）＋合計資産の線＋売買の印
+const PAL=["#2F5DBA","#C0622A","#6B4FA0","#2E8A7A","#B8475A","#8A7A2E","#3D8FC4","#7A5C3E","#5E8C3A","#A03A8C"];
+let M="claude";
+const short=n=>{n=String(n||"").replace(/フィナンシャル・グループ|ホールディングス|フィナンシャルグループ|製作所|工業|（株）|\(株\)/g,"").trim();return n.length>8?n.slice(0,7)+"…":n};
+function drawMix(){
+  const s=$("mchart"),W=s.clientWidth,H=s.clientHeight;if(!W||!H)return;
+  const a=R.acct[M],h=a.hist,n=h.length,names=a.names||{};
+  const codes=[];for(const e of h)for(const c of Object.keys(e.parts||{}))if(!codes.includes(c))codes.push(c);
+  const col=c=>PAL[codes.indexOf(c)%PAL.length];
+  const wide=W>=560,L=wide?64:44,Rm=wide?180:12,T=40,Bm=26;
+  // 階段状：各時点の値を次の時点まで保つ
+  const stepPts=v=>{const o=[];for(let i=0;i<n;i++){o.push([x(i),y(v[i])]);o.push([x(i+1),y(v[i])])}return o};
+  const hi=Math.max(START,...h.map(e=>e.total))*1.08;
+  const x=i=>L+i*(W-L-Rm)/Math.max(n,1),y=v=>T+(hi-v)/hi*(H-T-Bm);
+  const layers=[{k:"cash",name:"現金",fill:"var(--cashfill)",v:e=>e.cash},...codes.map(c=>({k:c,name:`${short(names[c]||c)}（${c}）`,fill:col(c),v:e=>(e.parts||{})[c]||0}))];
+  const base=h.map(()=>0);let out="";
+  const ticks=[0,1,2,3,4].map(k=>hi/1.08*k/4);
+  out+=ticks.map(t=>`<line x1="${L}" x2="${W-Rm}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${L-6}" y="${y(t)+4}" text-anchor="end" font-size="11" fill="var(--sub)">${t>=10000?Math.round(t/10000)+"万":Math.round(t)}</text>`).join("");
+  const lab=[];
+  for(const ly of layers){
+    const top=h.map((e,i)=>base[i]+ly.v(e));
+    if(top.every((v,i)=>v===base[i])){continue}
+    const up=stepPts(top).map(([a,b])=>`${a.toFixed(1)},${b.toFixed(1)}`),dn=stepPts(base).map(([a,b])=>`${a.toFixed(1)},${b.toFixed(1)}`).reverse();
+    out+=`<polygon points="${up.join(" ")} ${dn.join(" ")}" fill="${ly.fill}" stroke="var(--card)" stroke-width="1"/>`;
+    const li=n-1,mid=(y(top[li])+y(base[li]))/2,th=y(base[li])-y(top[li]);
+    if(th>0.5)lab.push({y:mid,name:ly.name,fill:ly.fill});
+    for(let i=0;i<n;i++)base[i]=top[i];
+  }
+  // 右側の名札（重なりを下へずらす）
+  if(wide){lab.sort((p,q)=>p.y-q.y);let last=-1e9;for(const b of lab){b.ly=Math.max(b.y,last+16);last=b.ly}
+    const ex=x(n);out+=lab.map(b=>`<line x1="${ex}" y1="${b.y}" x2="${ex+10}" y2="${b.ly}" stroke="var(--sub)" stroke-width="1"/><text x="${ex+14}" y="${b.ly+4}" font-size="12" fill="var(--ink)">${esc(b.name)}</text>`).join("")}
+  $("mlegend").innerHTML=wide?"":layers.filter(l=>h.some(e=>l.v(e)>0)).map(l=>`<span><i class="sw" style="background:${l.fill}"></i>${esc(l.name)}</span>`).join("");
+  const wy=y(WARN);out+=`<line x1="${L}" x2="${W-Rm}" y1="${wy}" y2="${wy}" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${L+4}" y="${wy-4}" font-size="11" fill="var(--warn)">警告 20万</text>`;
+  out+=`<path d="${stepPts(h.map(e=>e.total)).map(([a,b],i)=>(i?"L":"M")+a.toFixed(1)+" "+b.toFixed(1)).join(" ")}" fill="none" stroke="var(--total)" stroke-width="3" stroke-linejoin="round"/>`;
+  // 売買の印と吹き出し（間隔が狭いときは印だけ）
+  let lastLab=-1e9;
+  h.forEach((e,i)=>{if(!e.tr||!e.tr.length)return;
+    const buy=e.tr.filter(t=>t.side==="buy"),sell=e.tr.filter(t=>t.side==="sell"),cx=x(i),cy=y(e.total);
+    const txt=(buy.length?"買 "+(buy.length===1?short(buy[0].name):buy.length+"銘柄"):"")+(buy.length&&sell.length?"・":"")+(sell.length?"売 "+(sell.length===1?short(sell[0].name):sell.length+"銘柄"):"");
+    const tri=buy.length?`${cx-6},${cy-4} ${cx+6},${cy-4} ${cx},${cy-14}`:`${cx-6},${cy-14} ${cx+6},${cy-14} ${cx},${cy-4}`;
+    out+=`<polygon points="${tri}" fill="var(--total)"><title>${esc(e.d+" "+e.tr.map(t=>(t.side==="buy"?"買 ":"売 ")+t.name).join("、"))}</title></polygon>`;
+    if(cx-lastLab>=110){const w=txt.length*12+14,bx=Math.min(Math.max(cx-w/2,L),W-Rm-w);
+      out+=`<rect x="${bx}" y="${T-34}" width="${w}" height="22" rx="4" fill="var(--card)" stroke="var(--total)" stroke-width="1.5"/><text x="${bx+7}" y="${T-18}" font-size="12" font-weight="700" fill="var(--total)">${esc(txt)}</text><line x1="${cx}" y1="${T-12}" x2="${cx}" y2="${cy-15}" stroke="var(--total)" stroke-width="1" stroke-dasharray="2 2"/>`;lastLab=cx}
+  });
+  // 日付の目盛り（日付が変わるところ、間隔 70px 以上）
+  let lx=-1e9,pd="";h.forEach((e,i)=>{const d=e.d==="開始"?"開始":e.d.slice(5,10).replace("-","/");if(d===pd)return;pd=d;if(x(i)-lx<70&&i!==0)return;lx=x(i);out+=`<text x="${x(i)}" y="${H-6}" text-anchor="${i===0?"start":"middle"}" font-size="11" fill="var(--sub)">${esc(d)}</text>`});
+  s.innerHTML=out;
+}
+const ro2=new ResizeObserver(drawMix);ro2.observe($("mfig"));
+document.querySelectorAll("#mseg button").forEach(b=>b.onclick=()=>{M=b.dataset.m;document.querySelectorAll("#mseg button").forEach(x=>x.setAttribute("aria-pressed",x===b));drawMix()});
 
 const num=s=>String(s).trim()===""?NaN:Number(String(s).replace(/[,，円\s]/g,""));
 const fname=kind=>{const s=jst().replace(/[-:T]/g,"").slice(0,14);return`${s.slice(0,8)}-${s.slice(8,14)}-${kind}-${Math.random().toString(36).slice(2,6)}.txt`};
@@ -310,7 +373,7 @@ $("pf").onsubmit=e=>{e.preventDefault();$("p-res").textContent="";
   show($("p-res"),true,`現在値|${PN[P]}|${p.d}|${p.code}|${p.name}|${p.px}`,fname(P+"-px"),warn);
 };
 const hp=location.hash.slice(1);
-if(PS.includes(hp)){setP(hp);document.querySelectorAll("#pseg button").forEach(x=>x.disabled=x.dataset.p!==hp);$("lock").textContent="記入者固定："+PN[hp]}
+if(PS.includes(hp)){setP(hp);M=hp;document.querySelectorAll("#mseg button").forEach(x=>x.setAttribute("aria-pressed",x.dataset.m===hp));document.querySelectorAll("#pseg button").forEach(x=>x.disabled=x.dataset.p!==hp);$("lock").textContent="記入者固定："+PN[hp]}
 $("f-d").value=$("p-d").value=today();
 render();
 // 取消：1回目で確定ボタンに変わり、10秒以内にもう一度押すと取り消す

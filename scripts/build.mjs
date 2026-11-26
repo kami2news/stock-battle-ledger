@@ -8,7 +8,8 @@ const trades = [], prices = [], bad = [];
 const files = existsSync("entries") ? readdirSync("entries").filter(f => f.endsWith(".txt")).sort() : [];
 for (const file of files) {
   const m = file.match(/^(\d{8})-(\d{6})/);
-  const base = m ? Date.UTC(+m[1].slice(0, 4), +m[1].slice(4, 6) - 1, +m[1].slice(6, 8), +m[2].slice(0, 2), +m[2].slice(2, 4), +m[2].slice(4, 6)) : 0;
+  // ファイル名の時刻は日本時間なので、9 時間引いて UTC のミリ秒にする
+  const base = m ? Date.UTC(+m[1].slice(0, 4), +m[1].slice(4, 6) - 1, +m[1].slice(6, 8), +m[2].slice(0, 2), +m[2].slice(2, 4), +m[2].slice(4, 6)) - 9 * 3600e3 : 0;
   readFileSync("entries/" + file, "utf8").split(/\r?\n/).map(l => l.trim()).filter(Boolean).forEach((line, i) => {
     const f = line.split(/[|｜]/).map(s => s.trim()), id = file + (i ? "#" + i : ""), ts = base + i;
     if (f[0] === "記入" && f.length === 8 && who(f[1])) {
