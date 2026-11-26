@@ -219,7 +219,8 @@ const today=()=>jst().slice(0,10);
 const hhmm=ts=>ts?jstOf(ts).slice(11,16):"";
 const own=(f,p)=>new RegExp("^\\d{8}-\\d{6}-"+p+"-").test(f||"");
 const delUrl=f=>`https://github.com/${REPO}/delete/${BR}/entries/${encodeURIComponent(f)}`;
-const rmBtn=(f,p)=>CFG&&p==="muse"&&own(f,"muse")?`<button type="button" class="del" data-rm="${esc(f)}">取消</button>`:`<a class="del" href="${esc(delUrl(f))}" target="_blank" rel="noopener">取消</a>`;
+const LOCK=PS.includes(location.hash.slice(1))?location.hash.slice(1):null;
+const rmBtn=(f,p)=>LOCK&&p!==LOCK?"":CFG&&p==="muse"&&own(f,"muse")?`<button type="button" class="del" data-rm="${esc(f)}">取消</button>`:`<a class="del" href="${esc(delUrl(f))}" target="_blank" rel="noopener">取消</a>`;
 let TR=[],PR=[],BAD=0,BUILT=null,LOADING=true,R=compute([],[]),P="claude";
 const stopNote=a=>a.stopped?`中止：${esc(a.stopKey||"")} に合計資産が 0 円。以後の売買は無効（誤った記入を取り消すと再計算されます）`:"";
 
@@ -404,16 +405,16 @@ document.querySelectorAll("#mseg button").forEach(b=>b.onclick=()=>{M=b.dataset.
 const num=s=>String(s).trim()===""?NaN:Number(String(s).replace(/[,，円\s]/g,""));
 const fname=kind=>{const s=jst().replace(/[-:T]/g,"").slice(0,14);return`${s.slice(0,8)}-${s.slice(8,14)}-${kind}-${Math.random().toString(36).slice(2,6)}.txt`};
 const newUrl=(file,line)=>`https://github.com/${REPO}/new/${BR}?filename=${encodeURIComponent("entries/"+file)}&value=${encodeURIComponent(line+"\n")}`;
-let CFG=null,TOK=null;
+let CFG=null;
 const API=`https://api.github.com/repos/${REPO}/contents/entries/`;
 const b64d=t=>Uint8Array.from(atob(t),c=>c.charCodeAt(0));
 const b64u=s=>{const b=new TextEncoder().encode(s);let o="";for(const x of b)o+=String.fromCharCode(x);return btoa(o)};
+// 鍵はページに保持しない。書き込み・取消のたびに、その時点の入力欄のパスワードで復号し直す
 async function token(){
-  if(TOK)return TOK;const pw=$("pw").value;if(!pw)throw"パスワード未入力";
+  const pw=$("pw").value;if(!pw)throw"パスワード未入力";
   const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveKey"]);
   const key=await crypto.subtle.deriveKey({name:"PBKDF2",salt:b64d(CFG.salt),iterations:CFG.iter,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["decrypt"]);
-  try{TOK=new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(CFG.iv)},key,b64d(CFG.ct)))}catch(_){throw"パスワードが違います"}
-  return TOK;
+  try{return new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(CFG.iv)},key,b64d(CFG.ct)))}catch(_){throw"パスワードが違います"}
 }
 async function gh(path,opt={}){const t=await token();const r=await fetch(API+path,{...opt,headers:{Authorization:"Bearer "+t,Accept:"application/vnd.github+json"}});if(!r.ok)throw"GitHub "+r.status;return r.status===204?null:r.json()}
 async function putEntry(file,line){try{await gh(encodeURIComponent(file),{method:"PUT",body:JSON.stringify({message:"記入（"+file.split("-")[2]+"）",content:b64u(line+"\n"),branch:BR})});return"ok"}catch(e){return String(e)}}
