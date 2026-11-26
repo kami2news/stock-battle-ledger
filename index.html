@@ -109,7 +109,7 @@ details summary{cursor:pointer;font-size:13px;color:var(--sub);margin-top:8px;mi
 <div class="mixhead"><h2>資産の内訳</h2><span class="seg" id="mseg"><button type="button" data-m="claude" aria-pressed="true">Claude</button><button type="button" data-m="muse" aria-pressed="false">Muse</button></span></div>
 <div class="fig mixfig" id="mfig"><svg id="mchart" role="img" aria-label="現金と銘柄ごとの時価の推移"></svg></div>
 <div class="legend" id="mlegend"></div>
-<p class="meta">面＝現金と銘柄ごとのその時点の時価　線＝合計資産　▲買　▼売</p>
+<p class="meta">面＝現金と銘柄ごとの時価　線＝合計資産　▲買　▼売　記入の間は 10 分ごとの市場価格（Yahoo Finance）で評価。カードの数字は記録場の現在値で計算</p>
 </div></section>
 
 <section><div class="col" id="holds"></div></section>
@@ -164,12 +164,14 @@ function compute(trades,prices,today){
   ev.sort((a,b)=>a.x.d<b.x.d?-1:a.x.d>b.x.d?1:((a.x.ts||0)-(b.x.ts||0))||(a.k===b.k?0:a.k==="p"?-1:1));
   const keys=[...new Set(ev.map(e=>evKey(e.x)))];
   const S={};
-  for(const p of PS)S[p]={cash:START,pos:{},realized:0,stopped:false,stopKey:null,rec:{},trd:{},names:{},hist:[{d:"開始",total:START,cash:START,parts:{},tr:[]}]};
+  for(const p of PS)S[p]={cash:START,pos:{},realized:0,stopped:false,stopKey:null,rec:{},trd:{},names:{},hist:[{d:"開始",t:null,total:START,cash:START,parts:{},qty:{},tr:[]}]};
   const pxOf=(s,c)=>s.rec[c]||s.trd[c]||null;
   const value=s=>{let v=0;for(const[c,h]of Object.entries(s.pos)){const q=pxOf(s,c);v+=h.qty*(q?q.px:h.avg)}return v};
   let i=0;
   for(const k of keys){
     const grp=[];while(i<ev.length&&evKey(ev[i].x)===k)grp.push(ev[i++]);
+    // その区切りの時刻（ms）。記入時刻がその日付と違う記入は、その日の 15:30 とみなす
+    const gt=Math.max(...grp.map(e=>e.x.ts&&jstOf(e.x.ts).slice(0,10)===e.x.d?e.x.ts:Date.parse(e.x.d+"T15:30:00+09:00")));
     for(const e of grp)if(e.k==="p"){const pr=e.x;for(const p of PS)if(!pr.p||pr.p===p)S[p].rec[pr.code]={px:pr.px,d:pr.d}}
     for(const p of PS){const s=S[p];if(!s.stopped&&s.cash+value(s)<=0){s.stopped=true;s.stopKey=k}}
     for(const e of grp){if(e.k!=="t")continue;const t=e.x,s=S[t.p];
@@ -188,8 +190,8 @@ function compute(trades,prices,today){
       status.set(t.id,"有効");
     }
     for(const p of PS){const s=S[p],total=s.cash+value(s);if(!s.stopped&&total<=0){s.stopped=true;s.stopKey=k}
-      const parts={};for(const[c,h]of Object.entries(s.pos)){const q=pxOf(s,c);parts[c]=h.qty*(q?q.px:h.avg)}
-      s.hist.push({d:k,total,cash:s.cash,parts,tr:s.gtr||[]});s.gtr=[]}
+      const parts={},qty={};for(const[c,h]of Object.entries(s.pos)){const q=pxOf(s,c);parts[c]=h.qty*(q?q.px:h.avg);qty[c]=h.qty}
+      s.hist.push({d:k,t:gt,total,cash:s.cash,parts,qty,tr:s.gtr||[]});s.gtr=[]}
   }
   for(const p of PS){
     const s=S[p];
@@ -249,23 +251,64 @@ function render(){
   $("hist").innerHTML=`<tr><th>日付・時刻</th><th class="n">Claude 合計資産</th><th class="n">Muse 合計資産</th></tr>`+H.claude.map((h,i)=>({h,m:H.muse[i]})).reverse().map(({h,m})=>`<tr><td>${esc(h.d)}</td><td class="n">${yen(h.total)}</td><td class="n">${yen(m.total)}</td></tr>`).join("");
   const a=R.acct[P];$("f-go").disabled=LOADING||a.stopped;$("p-go").disabled=LOADING;
   $("stopmsg").textContent=a.stopped&&!LOADING?`${PN[P]} は${stopNote(a)}。`:"";
-  draw();drawMix();
+  SER=seriesAll();draw();drawMix();
 }
+// ---- グラフ用の系列：記録場の記入（区切り）に、10分ごとの市場価格（quotes/history）を挟んで滑らかにする ----
+let QH=[];   // [{t:ms, q:{コード:株価}}]
+const RAW=`https://raw.githubusercontent.com/${REPO}/${BR}/quotes/history/`;
+async function loadQuotes(){
+  try{
+    const idx=await fetch(RAW+"index.json?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.json():{days:[]});
+    const out=[];
+    for(const d of (idx.days||[]).slice(-60)){
+      const txt=await fetch(RAW+d+".jsonl?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.text():"");
+      for(const line of txt.split("\n")){if(!line.trim())continue;try{const j=JSON.parse(line),q={};let tm="";
+        for(const[c,v]of Object.entries(j.q||{}))if(Array.isArray(v)&&typeof v[0]==="number"){q[c]=v[0];if(v[1]>tm)tm=v[1]}
+        // 株価の時刻（その回で最も新しいもの）を点の時刻にする
+        const t=Date.parse(d+"T"+(tm||j.t.slice(11,16))+":00+09:00");if(isFinite(t))out.push({t,q})}catch(_){}}
+    }
+    out.sort((a,b)=>a.t-b.t);
+    // 同じ時刻の点はまとめる
+    QH=out.filter((x,i)=>i===out.length-1||out[i+1].t!==x.t);
+  }catch(_){QH=[]}
+}
+function seriesAll(){
+  const H={claude:R.acct.claude.hist,muse:R.acct.muse.hist};
+  const evs=H.claude.slice(1).map((e,i)=>({t:e.t,ev:i+1}));
+  const first=evs.length?evs[0].t:null;
+  const startDay=first?Date.parse(jstOf(first).slice(0,10)+"T00:00:00+09:00"):-Infinity;
+  const qs=QH.filter(q=>q.t>=startDay).map(q=>({t:q.t,q:q.q}));
+  const tl=[...evs,...qs].sort((a,b)=>a.t-b.t||(a.q?-1:1));
+  const out={};
+  for(const p of PS){
+    const h=H[p];let st=h[0];const last={};const pts=[];let xi=0;
+    const val=(s,t,tr,ev)=>{const parts={};let stock=0;for(const[c,n]of Object.entries(s.qty||{})){const px=last[c]!=null?last[c]:(s.parts[c]||0)/n;parts[c]=n*px;stock+=parts[c]}
+      return{t,xi,total:s.cash+stock,cash:s.cash,parts,tr:tr||[],ev:!!ev,d:jstOf(t).slice(0,16).replace("T"," ")}};
+    pts.push({...val(st,(tl[0]?tl[0].t:Date.now())-60000),d:"開始"});
+    for(const it of tl){
+      if(it.q){Object.assign(last,it.q);xi++;pts.push(val(st,it.t))}
+      else{const ne=h[it.ev];xi++;pts.push(val(st,it.t));st=ne;pts.push(val(st,it.t,ne.tr,true))}   // 記入の前後を同じ位置に置き、変化を縦に描く
+    }
+    out[p]=pts;
+  }
+  return out;
+}
+let SER={claude:[],muse:[]};
 const svg=$("chart");
 function draw(){
   const W=svg.clientWidth,H=svg.clientHeight;if(!W||!H)return;
-  const A=R.acct.claude.hist,B=R.acct.muse.hist,n=A.length,all=[...A,...B].map(h=>h.total);
+  const A=SER.claude,B=SER.muse,n=Math.max(1,(A[A.length-1]||{xi:0}).xi),all=[...A,...B].map(h=>h.total);
   let lo=Math.min(WARN,...all),hi=Math.max(START,...all);const pad=(hi-lo)*.08||50000;lo=Math.max(0,lo-pad);hi+=pad;
-  const L=W<520?56:88,Rm=16,T=12,Bm=28,x=i=>L+(n<2?(W-L-Rm)/2:i*(W-L-Rm)/(n-1)),y=v=>T+(hi-v)/(hi-lo)*(H-T-Bm);
+  const L=W<520?56:88,Rm=16,T=12,Bm=28,x=i=>L+i*(W-L-Rm)/n,y=v=>T+(hi-v)/(hi-lo)*(H-T-Bm);
   const ticks=[0,1,2,3,4].map(k=>lo+(hi-lo)*k/4);
-  const path=a=>a.map((h,i)=>(i?"L":"M")+x(i).toFixed(1)+" "+y(h.total).toFixed(1)).join(" ");
-  const lab=[0,n-1].filter((v,i,s)=>s.indexOf(v)===i),wy=y(WARN);
+  const path=a=>a.map((h,i)=>(i?"L":"M")+x(h.xi).toFixed(1)+" "+y(h.total).toFixed(1)).join(" ");
+  const wy=y(WARN);
   svg.innerHTML=ticks.map(t=>`<line x1="${L}" x2="${W-Rm}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${L-6}" y="${y(t)+4}" text-anchor="end" font-size="11" fill="var(--sub)">${W<520?Math.round(t/1000)+"k":Math.round(t).toLocaleString("ja-JP")}</text>`).join("")
    +`<line x1="${L}" x2="${W-Rm}" y1="${wy}" y2="${wy}" stroke="var(--warn)" stroke-width="2" stroke-dasharray="4 3"/><text x="${W-Rm}" y="${wy-5}" text-anchor="end" font-size="11" font-weight="600" fill="var(--warn)">警告 200,000</text>`
-   +`<path d="${path(A)}" fill="none" stroke="var(--claude)" stroke-width="3"/><path d="${path(B)}" fill="none" stroke="var(--muse)" stroke-width="3" stroke-dasharray="6 4"/>`
-   +(n<=60?A.map((h,i)=>`<circle cx="${x(i)}" cy="${y(h.total)}" r="3" fill="var(--claude)"/>`).join("")+B.map((h,i)=>`<circle cx="${x(i)}" cy="${y(h.total)}" r="3" fill="var(--muse)"/>`).join(""):"")
-   +lab.map(i=>`<text x="${x(i)}" y="${H-8}" text-anchor="${n<2?"middle":i===0?"start":"end"}" font-size="11" fill="var(--sub)">${esc(A[i].d)}</text>`).join("");
+   +`<path d="${path(A)}" fill="none" stroke="var(--claude)" stroke-width="2.5" stroke-linejoin="round"/><path d="${path(B)}" fill="none" stroke="var(--muse)" stroke-width="2.5" stroke-dasharray="6 4" stroke-linejoin="round"/>`
+   +dateTicks(A,x,H);
 }
+function dateTicks(A,x,H){let o="",lx=-1e9,pd="";A.forEach(e=>{if(e.d==="開始")return;const d=e.d.slice(5,10).replace("-","/");if(d===pd)return;pd=d;if(x(e.xi)-lx<64)return;lx=x(e.xi);o+=`<text x="${x(e.xi)}" y="${H-8}" text-anchor="${lx<120?"start":"middle"}" font-size="11" fill="var(--sub)">${esc(d)}</text>`});return o}
 const ro=new ResizeObserver(draw);ro.observe($("fig"));
 // 資産の内訳（積み上げ面）＋合計資産の線＋売買の印
 const PAL=["#2F5DBA","#C0622A","#6B4FA0","#2E8A7A","#B8475A","#8A7A2E","#3D8FC4","#7A5C3E","#5E8C3A","#A03A8C"];
@@ -273,50 +316,46 @@ let M="claude";
 const short=n=>{n=String(n||"").replace(/フィナンシャル・グループ|ホールディングス|フィナンシャルグループ|製作所|工業|（株）|\(株\)/g,"").trim();return n.length>8?n.slice(0,7)+"…":n};
 function drawMix(){
   const s=$("mchart"),W=s.clientWidth,H=s.clientHeight;if(!W||!H)return;
-  const a=R.acct[M],h=a.hist,n=h.length,names=a.names||{};
-  const codes=[];for(const e of h)for(const c of Object.keys(e.parts||{}))if(!codes.includes(c))codes.push(c);
+  const a=R.acct[M],h=SER[M],names=a.names||{},n=Math.max(1,(h[h.length-1]||{xi:0}).xi);
+  const codes=[];for(const e of R.acct[M].hist)for(const c of Object.keys(e.qty||{}))if(!codes.includes(c))codes.push(c);
   const col=c=>PAL[codes.indexOf(c)%PAL.length];
   const wide=W>=560,L=wide?64:44,Rm=wide?180:12,T=40,Bm=26;
-  // 階段状：各時点の値を次の時点まで保つ
-  const stepPts=v=>{const o=[];for(let i=0;i<n;i++){o.push([x(i),y(v[i])]);o.push([x(i+1),y(v[i])])}return o};
   const hi=Math.max(START,...h.map(e=>e.total))*1.08;
-  const x=i=>L+i*(W-L-Rm)/Math.max(n,1),y=v=>T+(hi-v)/hi*(H-T-Bm);
+  const x=i=>L+i*(W-L-Rm)/n,y=v=>T+(hi-v)/hi*(H-T-Bm);
   const layers=[{k:"cash",name:"現金",fill:"var(--cashfill)",v:e=>e.cash},...codes.map(c=>({k:c,name:`${short(names[c]||c)}（${c}）`,fill:col(c),v:e=>(e.parts||{})[c]||0}))];
   const base=h.map(()=>0);let out="";
   const ticks=[0,1,2,3,4].map(k=>hi/1.08*k/4);
   out+=ticks.map(t=>`<line x1="${L}" x2="${W-Rm}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${L-6}" y="${y(t)+4}" text-anchor="end" font-size="11" fill="var(--sub)">${t>=10000?Math.round(t/10000)+"万":Math.round(t)}</text>`).join("");
-  const lab=[];
+  const lab=[],P=(v,i)=>`${x(h[i].xi).toFixed(1)},${y(v).toFixed(1)}`;
   for(const ly of layers){
     const top=h.map((e,i)=>base[i]+ly.v(e));
-    if(top.every((v,i)=>v===base[i])){continue}
-    const up=stepPts(top).map(([a,b])=>`${a.toFixed(1)},${b.toFixed(1)}`),dn=stepPts(base).map(([a,b])=>`${a.toFixed(1)},${b.toFixed(1)}`).reverse();
-    out+=`<polygon points="${up.join(" ")} ${dn.join(" ")}" fill="${ly.fill}" stroke="var(--card)" stroke-width="1"/>`;
-    const li=n-1,mid=(y(top[li])+y(base[li]))/2,th=y(base[li])-y(top[li]);
-    if(th>0.5)lab.push({y:mid,name:ly.name,fill:ly.fill});
-    for(let i=0;i<n;i++)base[i]=top[i];
+    if(top.every((v,i)=>Math.abs(v-base[i])<1e-9))continue;
+    out+=`<polygon points="${top.map(P).join(" ")} ${base.map(P).reverse().join(" ")}" fill="${ly.fill}" stroke="${ly.fill}" stroke-width=".5" stroke-linejoin="round"/>`;
+    const li=h.length-1,th=y(base[li])-y(top[li]);
+    if(th>0.5)lab.push({y:(y(top[li])+y(base[li]))/2,name:ly.name,fill:ly.fill});
+    for(let i=0;i<h.length;i++)base[i]=top[i];
   }
-  // 右側の名札（重なりを下へずらす）
+  const ex=x(n);
   if(wide){lab.sort((p,q)=>p.y-q.y);let last=-1e9;for(const b of lab){b.ly=Math.max(b.y,last+16);last=b.ly}
-    const ex=x(n);out+=lab.map(b=>`<line x1="${ex}" y1="${b.y}" x2="${ex+10}" y2="${b.ly}" stroke="var(--sub)" stroke-width="1"/><text x="${ex+14}" y="${b.ly+4}" font-size="12" fill="var(--ink)">${esc(b.name)}</text>`).join("")}
+    out+=lab.map(b=>`<line x1="${ex}" y1="${b.y}" x2="${ex+10}" y2="${b.ly}" stroke="var(--sub)" stroke-width="1"/><text x="${ex+14}" y="${b.ly+4}" font-size="12" fill="var(--ink)">${esc(b.name)}</text>`).join("")}
   $("mlegend").innerHTML=wide?"":layers.filter(l=>h.some(e=>l.v(e)>0)).map(l=>`<span><i class="sw" style="background:${l.fill}"></i>${esc(l.name)}</span>`).join("");
-  const wy=y(WARN);out+=`<line x1="${L}" x2="${W-Rm}" y1="${wy}" y2="${wy}" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${L+4}" y="${wy-4}" font-size="11" fill="var(--warn)">警告 20万</text>`;
-  out+=`<path d="${stepPts(h.map(e=>e.total)).map(([a,b],i)=>(i?"L":"M")+a.toFixed(1)+" "+b.toFixed(1)).join(" ")}" fill="none" stroke="var(--total)" stroke-width="3" stroke-linejoin="round"/>`;
-  // 売買の印と吹き出し（間隔が狭いときは印だけ）
+  const wy=y(WARN);out+=`<line x1="${L}" x2="${ex}" y1="${wy}" y2="${wy}" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${L+4}" y="${wy-4}" font-size="11" fill="var(--warn)">警告 20万</text>`;
+  out+=`<path d="${h.map((e,i)=>(i?"L":"M")+x(e.xi).toFixed(1)+" "+y(e.total).toFixed(1)).join(" ")}" fill="none" stroke="var(--total)" stroke-width="3" stroke-linejoin="round"/>`;
   let lastLab=-1e9;
-  h.forEach((e,i)=>{if(!e.tr||!e.tr.length)return;
-    const buy=e.tr.filter(t=>t.side==="buy"),sell=e.tr.filter(t=>t.side==="sell"),cx=x(i),cy=y(e.total);
+  h.forEach(e=>{if(!e.ev||!e.tr||!e.tr.length)return;
+    const buy=e.tr.filter(t=>t.side==="buy"),sell=e.tr.filter(t=>t.side==="sell"),cx=x(e.xi),cy=y(e.total);
     const txt=(buy.length?"買 "+(buy.length===1?short(buy[0].name):buy.length+"銘柄"):"")+(buy.length&&sell.length?"・":"")+(sell.length?"売 "+(sell.length===1?short(sell[0].name):sell.length+"銘柄"):"");
     const tri=buy.length?`${cx-6},${cy-4} ${cx+6},${cy-4} ${cx},${cy-14}`:`${cx-6},${cy-14} ${cx+6},${cy-14} ${cx},${cy-4}`;
     out+=`<polygon points="${tri}" fill="var(--total)"><title>${esc(e.d+" "+e.tr.map(t=>(t.side==="buy"?"買 ":"売 ")+t.name).join("、"))}</title></polygon>`;
-    if(cx-lastLab>=110){const w=txt.length*12+14,bx=Math.min(Math.max(cx-w/2,L),W-Rm-w);
+    if(cx-lastLab>=110){const w=txt.length*12+14,bx=Math.min(Math.max(cx-w/2,L),ex-w);
       out+=`<rect x="${bx}" y="${T-34}" width="${w}" height="22" rx="4" fill="var(--card)" stroke="var(--total)" stroke-width="1.5"/><text x="${bx+7}" y="${T-18}" font-size="12" font-weight="700" fill="var(--total)">${esc(txt)}</text><line x1="${cx}" y1="${T-12}" x2="${cx}" y2="${cy-15}" stroke="var(--total)" stroke-width="1" stroke-dasharray="2 2"/>`;lastLab=cx}
   });
-  // 日付の目盛り（日付が変わるところ、間隔 70px 以上）
-  let lx=-1e9,pd="";h.forEach((e,i)=>{const d=e.d==="開始"?"開始":e.d.slice(5,10).replace("-","/");if(d===pd)return;pd=d;if(x(i)-lx<70&&i!==0)return;lx=x(i);out+=`<text x="${x(i)}" y="${H-6}" text-anchor="${i===0?"start":"middle"}" font-size="11" fill="var(--sub)">${esc(d)}</text>`});
+  out+=dateTicks(h,x,H);
   s.innerHTML=out;
 }
 const ro2=new ResizeObserver(drawMix);ro2.observe($("mfig"));
 document.querySelectorAll("#mseg button").forEach(b=>b.onclick=()=>{M=b.dataset.m;document.querySelectorAll("#mseg button").forEach(x=>x.setAttribute("aria-pressed",x===b));drawMix()});
+
 
 const num=s=>String(s).trim()===""?NaN:Number(String(s).replace(/[,，円\s]/g,""));
 const fname=kind=>{const s=jst().replace(/[-:T]/g,"").slice(0,14);return`${s.slice(0,8)}-${s.slice(8,14)}-${kind}-${Math.random().toString(36).slice(2,6)}.txt`};
@@ -381,6 +420,7 @@ document.addEventListener("click",async e=>{const b=e.target.closest("button[dat
   if(!b.classList.contains("arm")){b.classList.add("arm");b.textContent="取消を確定（10秒以内）";clearTimeout(b._t);b._t=setTimeout(()=>{if(!b.disabled){b.classList.remove("arm");b.textContent="取消（時間切れ。もう一度押す）"}},10000);return}
   clearTimeout(b._t);b.disabled=true;b.textContent="取消中";const r=await rmEntry(b.dataset.rm);b.textContent=r==="ok"?"取消済み（1〜2分で反映）":"失敗："+r});
 fetch("writer.json",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.ct){CFG=j;$("pwrow").hidden=false;render()}}).catch(()=>{});
+loadQuotes().then(()=>{if(!LOADING)render()});
 fetch("ledger.json?t="+Date.now(),{cache:"no-store"}).then(r=>{if(!r.ok)throw 0;return r.json()}).then(j=>{TR=j.trades||[];PR=j.prices||[];BAD=(j.bad||[]).length;BUILT=j.built;LOADING=false;render()})
  .catch(()=>{LOADING=false;const c=$("conn");c.hidden=false;c.textContent="集計データを読み込めません。表示は初期状態で、正しくありません。";render();$("asof").textContent="読み込み失敗"});
 }
