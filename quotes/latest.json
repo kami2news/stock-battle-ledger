@@ -1,59 +1,59 @@
 {
- "fetchedAt": "2026-11-26 15:10:05",
+ "fetchedAt": "2026-11-26 15:20:06",
  "quotes": {
   "4502": {
    "name": "武田薬品工業",
-   "price": 7274,
-   "time": "2026-11-26 14:55:02",
+   "price": 7279,
+   "time": "2026-11-26 15:05:04",
    "prevClose": 7365,
    "source": "Yahoo Finance chart API"
   },
   "6501": {
    "name": "日立製作所",
-   "price": 5025,
-   "time": "2026-11-26 14:55:05",
+   "price": 5010,
+   "time": "2026-11-26 15:05:04",
    "prevClose": 4959,
    "source": "Yahoo Finance chart API"
   },
   "7203": {
    "name": "トヨタ自動車",
    "price": 3395,
-   "time": "2026-11-26 14:55:04",
+   "time": "2026-11-26 15:05:05",
    "prevClose": 3406,
    "source": "Yahoo Finance chart API"
   },
   "8035": {
    "name": "東京エレクトロン",
-   "price": 7913,
-   "time": "2026-11-26 14:55:05",
+   "price": 7879,
+   "time": "2026-11-26 15:05:05",
    "prevClose": 7825,
    "source": "Yahoo Finance chart API"
   },
   "8058": {
    "name": "三菱商事",
-   "price": 5066,
-   "time": "2026-11-26 14:55:01",
+   "price": 5058,
+   "time": "2026-11-26 15:05:05",
    "prevClose": 5037,
    "source": "Yahoo Finance chart API"
   },
   "8306": {
    "name": "三菱UFJフィナンシャル・グループ",
-   "price": 3141,
-   "time": "2026-11-26 14:55:00",
+   "price": 3133,
+   "time": "2026-11-26 15:05:05",
    "prevClose": 3122,
    "source": "Yahoo Finance chart API"
   },
   "9432": {
    "name": "NTT",
-   "price": 169.3,
-   "time": "2026-11-26 14:55:04",
+   "price": 169.1,
+   "time": "2026-11-26 15:05:00",
    "prevClose": 168,
    "source": "Yahoo Finance chart API"
   },
   "N225": {
    "name": "日経平均",
-   "price": 57805.37,
-   "time": "2026-11-26 14:55:00",
+   "price": 57601.64,
+   "time": "2026-11-26 15:05:00",
    "prevClose": 57011.62,
    "source": "Yahoo Finance chart API"
   }
