@@ -13,7 +13,10 @@ for (const file of files) {
     const f = line.split(/[|｜]/).map(s => s.trim()), id = file + (i ? "#" + i : ""), ts = base + i;
     if (f[0] === "記入" && f.length === 8 && who(f[1])) {
       trades.push({ id, file, ts, p: who(f[1]), d: f[2], side: f[3] === "買" ? "buy" : f[3] === "売" ? "sell" : "?", code: f[4], name: f[5], qty: num(f[6]), px: num(f[7]) });
+    } else if (f[0] === "現在値" && f.length === 6 && who(f[1])) {
+      prices.push({ id, file, ts, p: who(f[1]), d: f[2], code: f[3], name: f[4], px: num(f[5]) });
     } else if (f[0] === "現在値" && f.length === 5) {
+      // 旧形式（記入者なし）。11/26 の試験日の記入だけが対象で、両者に効く
       prices.push({ id, file, ts, d: f[1], code: f[2], name: f[3], px: num(f[4]) });
     } else bad.push({ file });
   });
