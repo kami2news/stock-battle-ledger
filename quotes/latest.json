@@ -1,60 +1,67 @@
 {
- "fetchedAt": "2026-11-26 15:40:06",
+ "fetchedAt": "2026-11-27 14:17:03",
  "quotes": {
   "4502": {
    "name": "武田薬品工業",
-   "price": 7263,
-   "time": "2026-11-26 15:24:56",
-   "prevClose": 7365,
+   "price": 7385,
+   "time": "2026-11-27 14:02:00",
+   "prevClose": 7250,
    "source": "Yahoo Finance chart API"
   },
   "6501": {
    "name": "日立製作所",
-   "price": 4995,
-   "time": "2026-11-26 15:24:57",
-   "prevClose": 4959,
+   "price": 5176,
+   "time": "2026-11-27 14:01:55",
+   "prevClose": 5012,
    "source": "Yahoo Finance chart API"
   },
   "7203": {
    "name": "トヨタ自動車",
-   "price": 3380,
-   "time": "2026-11-26 15:24:58",
-   "prevClose": 3406,
+   "price": 3398,
+   "time": "2026-11-27 14:01:55",
+   "prevClose": 3377,
    "source": "Yahoo Finance chart API"
   },
   "8035": {
    "name": "東京エレクトロン",
-   "price": 7834,
-   "time": "2026-11-26 15:24:59",
-   "prevClose": 7825,
+   "price": 8130,
+   "time": "2026-11-27 14:02:02",
+   "prevClose": 7871,
    "source": "Yahoo Finance chart API"
   },
   "8058": {
    "name": "三菱商事",
-   "price": 5039,
-   "time": "2026-11-26 15:24:59",
-   "prevClose": 5037,
+   "price": 5172,
+   "time": "2026-11-27 14:02:02",
+   "prevClose": 5050,
    "source": "Yahoo Finance chart API"
   },
   "8306": {
    "name": "三菱UFJフィナンシャル・グループ",
-   "price": 3120,
-   "time": "2026-11-26 15:24:59",
-   "prevClose": 3122,
+   "price": 3198,
+   "time": "2026-11-27 14:02:02",
+   "prevClose": 3118,
    "source": "Yahoo Finance chart API"
   },
   "9432": {
    "name": "NTT",
-   "price": 169,
-   "time": "2026-11-26 15:24:59",
-   "prevClose": 168,
+   "price": 169.4,
+   "time": "2026-11-27 14:01:56",
+   "prevClose": 169.3,
+   "source": "Yahoo Finance chart API"
+  },
+  "9433": {
+   "name": "KDDI",
+   "price": 2797,
+   "time": "2026-11-27 14:02:00",
+   "prevClose": 2804.5,
    "source": "Yahoo Finance chart API"
   },
   "N225": {
    "name": "日経平均",
-   "price": 57440.36,
-   "time": "2026-11-26 15:25:05",
-   "prevClose": 57011.62,
+   "price": 58623.08,
+   "time": "2026-11-27 14:02:00",
+   "prevClose": 57499.16,
    "source": "Yahoo Finance chart API"
   }
  }
