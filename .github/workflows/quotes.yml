@@ -1,10 +1,13 @@
 name: 株価を取得
 
-# 平日の朝に1回起動し、15:45（日本時間）まで 10 分ごとに株価を取得し続ける。
-# 定期実行の遅れに左右されないよう、1つのジョブの中で繰り返す。
+# 平日 8:05〜15:35（日本時間）に 30 分ごとに起動し、1 回の起動で最大 55 分、10 分ごとに株価を取得する。
+# GitHub の定期実行は数時間遅れたり抜けたりすることがある（11/27 は 8:35 の起動が 14:16 まで遅れた）ため、
+# 起動の回数を増やし、どれか 1 つが動けば続きを取れるようにする。
+# また 1 ジョブは 6 時間で打ち切られるので、1 回の起動を短くする。
 on:
   schedule:
-    - cron: "35 23 * * 0-4"   # 日本時間 平日 8:35
+    - cron: "5,35 23 * * 0-4"   # 日本時間 平日 8:05, 8:35
+    - cron: "5,35 0-6 * * 1-5"  # 日本時間 平日 9:05〜15:35
   push:
     paths:
       - ".github/workflows/quotes.yml"
@@ -21,20 +24,22 @@ concurrency:
 jobs:
   quotes:
     runs-on: ubuntu-latest
-    timeout-minutes: 460
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: 15:45 まで 10 分ごとに取得
+      - name: 15:45 まで（最大 55 分）10 分ごとに取得
         run: |
+          start=$(date +%s)
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           while :; do
             hm=$(TZ=Asia/Tokyo date +%H%M)
             dow=$(TZ=Asia/Tokyo date +%u)
             if [ "$dow" -ge 6 ] || [ "$hm" -gt 1545 ]; then echo "終了 $hm"; break; fi
+            if [ $(( $(date +%s) - start )) -gt 3300 ]; then echo "次の起動に引き継ぎ $hm"; break; fi
             if [ "$hm" -ge 0850 ]; then
               git pull --rebase -q || true
               node scripts/quotes.mjs || true
